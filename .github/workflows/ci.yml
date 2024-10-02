@@ -1,5 +1,6 @@
 name: CI/CD Pipeline with DevSecOps
 
+# Trigger this workflow on push or pull request to the main branch
 on:
   push:
     branches:
@@ -8,51 +9,65 @@ on:
     branches:
       - main
 
+# Permissions required to write to GitHub Container Registry (packages)
+permissions:
+  packages: write  # Allow pushing Docker images to GitHub Packages
+
 jobs:
+  # A single job that handles the entire DevSecOps pipeline
   devsecops-pipeline:
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
+    runs-on: ubuntu-latest  # Use the latest version of Ubuntu for this job
+
     steps:
-      # Step 1: Checkout repository
+      # Step 1: Checkout the code from the repository
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Use v4 of the checkout action
+        # Checkout the code so it can be built and scanned
 
-      # Step 2: Run Gitleaks to check for sensitive information
+      # Step 2: Run Gitleaks to scan for any sensitive information (secrets) in the codebase
       - name: Run Gitleaks to check for sensitive information
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v2  # Use Gitleaks action to detect secrets in the code
+        # Gitleaks scans the repository for any secrets or sensitive data and breaks the pipeline if found.
 
-      # Step 3: Set up Docker Buildx
+      # Step 3: Set up Docker Buildx (needed to build and push Docker images)
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v2  # Set up Docker Buildx to enable advanced build capabilities
+        # Docker Buildx allows building multi-platform images and other advanced features.
 
-      # Step 4: Log in to GitHub Container Registry
+      # Step 4: Log in to GitHub Container Registry to push the Docker image
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v2  # Use Docker login action to authenticate to GitHub's registry
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ghcr.io  # GitHub Container Registry
+          username: ${{ github.actor }}  # Use the GitHub actor (the user who triggered the workflow)
+          password: ${{ secrets.GITHUB_TOKEN }}  # Use the GitHub token to authenticate
+        # This step ensures that the Docker image can be pushed to GitHub Container Registry (ghcr.io).
 
-      # Step 5: Set environment variables
+      # Step 5: Set environment variables (Docker image name and ensure it is lowercase)
       - name: Set environment variables
         run: |
           IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/hello-world"
+          # Convert the image name to lowercase as GitHub Container Registry requires lowercase names
           IMAGE_NAME=$(echo $IMAGE_NAME | tr '[:upper:]' '[:lower:]')
+          # Set the environment variable to be used in subsequent steps
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+        # This step ensures that the image name is always lowercase and is accessible throughout the job.
 
-      # Step 6: Build Docker image
+      # Step 6: Build the Docker image for the application
       - name: Build Docker image
         run: |
-          docker build . -t ${{ env.IMAGE_NAME }}
+          docker build . -t ${{ env.IMAGE_NAME }}  # Build the Docker image and tag it with the correct name
+        # This step builds the Docker image for the application using the Dockerfile present in the repository.
 
-      # Step 7: Push Docker image to GitHub Container Registry
+      # Step 7: Push the Docker image to GitHub Container Registry
       - name: Push Docker image to GitHub Container Registry
         run: |
-          docker push ${{ env.IMAGE_NAME }}
+          docker push ${{ env.IMAGE_NAME }}  # Push the built Docker image to GitHub Container Registry
+        # Once the image is built, this step pushes it to the GitHub Container Registry for future use.
 
-      # Step 8: Scan Docker image for vulnerabilities with Trivy
+      # Step 8: Scan the Docker image for vulnerabilities using Trivy
       - name: Scan Docker image for vulnerabilities with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@master  # Use Trivy action to scan for vulnerabilities in Docker images
         with:
-          image-ref: ${{ env.IMAGE_NAME }}
+          image-ref: ${{ env.IMAGE_NAME }}  # Reference the built image to scan it for security issues
+        # Trivy will scan the Docker image for known vulnerabilities (CVEs) and break the pipeline if any are found.
